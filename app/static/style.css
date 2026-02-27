@@ -1,0 +1,183 @@
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #000;
+    border-left: 1px solid #333;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #39ff14;
+    border: 2px solid #000;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #2bb810;
+}
+
+.scanlines {
+    background: linear-gradient(to bottom,
+            rgba(255, 255, 255, 0),
+            rgba(255, 255, 255, 0) 50%,
+            rgba(0, 0, 0, 0.2) 50%,
+            rgba(0, 0, 0, 0.2));
+    background-size: 100% 4px;
+    position: fixed;
+    pointer-events: none;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+}
+
+.crt-flicker {
+    animation: flicker 0.15s infinite;
+    pointer-events: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(57, 255, 20, 0.02);
+    z-index: 49;
+}
+
+@keyframes flicker {
+    0% {
+        opacity: 0.97;
+    }
+
+    50% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0.98;
+    }
+}
+
+.glitch-hover:hover {
+    animation: glitch 0.3s cubic-bezier(.25, .46, .45, .94) both infinite;
+    color: #fff;
+    background: #39ff14;
+}
+
+@keyframes glitch {
+    0% {
+        transform: translate(0)
+    }
+
+    20% {
+        transform: translate(-2px, 2px)
+    }
+
+    40% {
+        transform: translate(-2px, -2px)
+    }
+
+    60% {
+        transform: translate(2px, 2px)
+    }
+
+    80% {
+        transform: translate(2px, -2px)
+    }
+
+    100% {
+        transform: translate(0)
+    }
+}
+
+.boot-seq {
+    opacity: 0;
+    animation: fadeIn 0.5s forwards;
+}
+
+.delay-100 {
+    animation-delay: 100ms;
+}
+
+.delay-200 {
+    animation-delay: 200ms;
+}
+
+.delay-300 {
+    animation-delay: 300ms;
+}
+
+.delay-500 {
+    animation-delay: 500ms;
+}
+
+.delay-700 {
+    animation-delay: 700ms;
+}
+
+.delay-1000 {
+    animation-delay: 1000ms;
+}
+
+@keyframes fadeIn {
+    to {
+        opacity: 1;
+    }
+}
+
+/* Loading animation */
+.dot-flashing {
+    position: relative;
+    width: 8px;
+    height: 8px;
+    background-color: #39ff14;
+    color: #39ff14;
+    animation: dot-flashing 1s infinite linear alternate;
+    animation-delay: 0.5s;
+}
+
+.dot-flashing::before,
+.dot-flashing::after {
+    content: '';
+    display: inline-block;
+    position: absolute;
+    top: 0;
+}
+
+.dot-flashing::before {
+    left: -12px;
+    width: 8px;
+    height: 8px;
+    background-color: #39ff14;
+    color: #39ff14;
+    animation: dot-flashing 1s infinite alternate;
+    animation-delay: 0s;
+}
+
+.dot-flashing::after {
+    left: 12px;
+    width: 8px;
+    height: 8px;
+    background-color: #39ff14;
+    color: #39ff14;
+    animation: dot-flashing 1s infinite alternate;
+    animation-delay: 1s;
+}
+
+@keyframes dot-flashing {
+    0% {
+        background-color: #39ff14;
+    }
+
+    50%,
+    100% {
+        background-color: rgba(57, 255, 20, 0.2);
+    }
+}
+
+/* Code view line numbers wrapper override */
+.hljs {
+    background: transparent !important;
+    padding: 0 !important;
+}

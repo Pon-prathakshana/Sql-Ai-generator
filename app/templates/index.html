@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Terminal SQL Converter</title>
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#39ff14", // Neon Green
+                        "primary-dim": "#2bb810",
+                        "background-light": "#000000",
+                        "background-dark": "#050505", // Deep black
+                        "terminal-gray": "#1a1a1a",
+                        "terminal-border": "#333333",
+                    },
+                    fontFamily: {
+                        mono: ['"JetBrains Mono"', 'monospace'],
+                        display: ['"JetBrains Mono"', 'monospace'],
+                    },
+                    borderRadius: {
+                        DEFAULT: "0px", // Terminals usually have sharp edges
+                    },
+                    animation: {
+                        'blink': 'blink 1s step-end infinite',
+                        'scanline': 'scanline 8s linear infinite',
+                        'type': 'typing 2s steps(40, end)',
+                    },
+                    keyframes: {
+                        blink: {
+                            '0%, 100%': { opacity: '1' },
+                            '50%': { opacity: '0' },
+                        },
+                        scanline: {
+                            '0%': { transform: 'translateY(-100%)' },
+                            '100%': { transform: 'translateY(100%)' },
+                        }
+                    }
+                },
+            },
+        };
+    </script>
+
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/sql.min.js"></script>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        /* Hide scrollbar for Chrome, Safari and Opera */
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* Hide scrollbar for IE, Edge and Firefox */
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            /* IE and Edge */
+            scrollbar-width: none;
+            /* Firefox */
+        }
+    </style>
+</head>
+
+<body
+    class="bg-gray-100 dark:bg-background-dark font-mono text-gray-900 dark:text-primary min-h-screen flex flex-col overflow-hidden relative selection:bg-primary selection:text-black">
+    <div class="scanlines hidden dark:block"></div>
+    <div class="crt-flicker hidden dark:block"></div>
+    <header
+        class="w-full border-b border-gray-300 dark:border-primary/30 p-4 flex items-center justify-between bg-white dark:bg-black z-10 boot-seq shrink-0">
+        <div class="flex items-center space-x-3">
+            <div
+                class="w-8 h-8 bg-black dark:bg-primary flex items-center justify-center text-white dark:text-black font-bold text-lg">
+                &gt;_
+            </div>
+            <div>
+                <h1 class="text-xl font-bold tracking-widest uppercase">Terminal SQL Converter</h1>
+                <p class="text-xs opacity-70">v.1.0.5 // SYSTEM: ONLINE // TAILWIND_UI</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-4">
+            <a href="/health"
+                class="flex items-center space-x-2 text-xs uppercase tracking-widest hidden sm:flex hover:text-primary transition-colors cursor-pointer group"
+                title="System Status Dashboard">
+                <span class="w-2 h-2 rounded-full bg-green-500 group-hover:animate-pulse"></span>
+                <span>Pulse Dashboard</span>
+            </a>
+            <button
+                class="p-2 border border-gray-300 dark:border-primary/50 hover:bg-gray-200 dark:hover:bg-primary/20 transition-colors"
+                onclick="document.documentElement.classList.toggle('dark')">
+                <span class="material-icons-outlined text-sm">brightness_4</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 flex flex-col overflow-hidden w-full max-w-7xl mx-auto z-10 relative boot-seq delay-100">
+        <!-- Tabs Navigation -->
+        <div
+            class="flex border-b border-gray-300 dark:border-primary/30 shrink-0 bg-white/50 dark:bg-black/50 backdrop-blur-md sticky top-0 z-20">
+            <button id="tab-btn-context"
+                class="flex-1 py-3 px-2 sm:px-4 text-center border-b-[3px] border-primary text-black dark:text-primary font-bold uppercase transition-colors text-xs md:text-sm cursor-pointer hover:bg-black/5 dark:hover:bg-primary/10 tracking-wider">
+                Context Setup (DDL)
+            </button>
+            <button id="tab-btn-query"
+                class="flex-1 py-3 px-2 sm:px-4 text-center border-b-[3px] border-transparent text-gray-500 hover:text-black dark:hover:text-primary transition-colors uppercase text-xs md:text-sm cursor-pointer hover:bg-black/5 dark:hover:bg-primary/10 tracking-wider">
+                Query Lab (NL)
+            </button>
+        </div>
+
+        <!-- Tab Panels -->
+        <div class="flex-1 relative overflow-hidden bg-transparent">
+            <!-- Context Tab Panel -->
+            <div id="tab-panel-context"
+                class="absolute inset-0 p-4 sm:p-6 lg:p-8 flex flex-col gap-4 transition-opacity duration-300 overflow-hidden">
+                <aside class="w-full h-full flex flex-col gap-4 relative animate-[fadeIn_0.5s_ease-out]">
+                    <div
+                        class="flex-1 border border-gray-300 dark:border-primary/30 bg-white dark:bg-black/80 backdrop-blur-sm p-1 flex flex-col relative group h-full shadow-lg dark:shadow-[0_0_15px_rgba(57,255,20,0.05)]">
+                        <div
+                            class="bg-gray-200 dark:bg-primary/10 p-2 border-b border-gray-300 dark:border-primary/30 flex justify-between items-center shrink-0">
+                            <h2 class="text-sm font-bold uppercase flex items-center gap-2">
+                                <span class="material-icons-outlined text-sm">storage</span>
+                                DATABASE_CONTEXT
+                            </h2>
+                            <span class="text-[10px] animate-pulse">[READY]</span>
+                        </div>
+                        <div class="p-4 flex flex-col gap-6 flex-1 h-[calc(100%-40px)]">
+                            <div class="space-y-2 shrink-0 max-w-md">
+                                <div class="flex justify-between items-end mb-1">
+                                    <label class="text-xs uppercase opacity-70 font-bold" for="model">&gt;
+                                        SELECT_MODEL</label>
+                                    <button id="refresh-models-btn" type="button"
+                                        class="text-[10px] font-bold tracking-wider text-gray-500 hover:text-black dark:text-primary/70 dark:hover:text-primary flex items-center gap-1 transition-colors"
+                                        title="Sync local Ollama models">
+                                        <span class="material-icons-outlined text-[12px] refresh-icon">sync</span>
+                                        REFRESH
+                                    </button>
+                                </div>
+                                <div class="relative">
+                                    <select id="model" name="model"
+                                        class="w-full bg-transparent border border-gray-400 dark:border-primary text-sm p-2.5 focus:ring-2 focus:ring-primary focus:border-primary appearance-none cursor-pointer uppercase dark:bg-black font-bold tracking-wide">
+                                        <option value="">LOADING MODELS...</option>
+                                    </select>
+                                    <div
+                                        class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500 dark:text-primary">
+                                        <span class="material-icons-outlined text-sm">expand_more</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex-1 flex flex-col min-h-0">
+                                <div class="flex justify-between items-end mb-2 shrink-0">
+                                    <label class="text-xs uppercase opacity-70 font-bold" for="schema">&gt; SCHEMA_INPUT
+                                        (DDL)</label>
+                                    <button id="load-example" type="button"
+                                        class="text-[10px] font-bold tracking-wider hover:bg-black dark:hover:bg-primary hover:text-white dark:hover:text-black px-2 py-1 border border-gray-400 dark:border-primary transition-all active:scale-95">
+                                        [LOAD_SAMPLE]
+                                    </button>
+                                </div>
+                                <div
+                                    class="flex-1 border border-gray-300 dark:border-primary/30 bg-gray-50 dark:bg-terminal-gray/30 p-2 font-mono text-xs md:text-sm relative flex overflow-hidden shadow-inner">
+                                    <textarea id="schema" name="schema"
+                                        class="w-full h-full bg-transparent border-none resize-none focus:ring-0 text-gray-800 dark:text-primary/90 leading-relaxed z-20 outline-none p-2"
+                                        spellcheck="false" placeholder="CREATE TABLE ..."></textarea>
+                                </div>
+                                <p class="text-[10px] mt-3 opacity-60 shrink-0 tracking-wide uppercase">
+                                    * Provide full CREATE TABLE statements for context parsing.
+                                </p>
+                            </div>
+                        </div>
+                        <div
+                            class="absolute -bottom-1 -right-1 w-2 h-2 border-r border-b border-gray-500 dark:border-primary">
+                        </div>
+                        <div
+                            class="absolute -top-1 -left-1 w-2 h-2 border-l border-t border-gray-500 dark:border-primary">
+                        </div>
+                    </div>
+                </aside>
+            </div>
+
+            <!-- Query Tab Panel -->
+            <div id="tab-panel-query"
+                class="absolute inset-0 p-4 sm:p-6 lg:p-8 flex flex-col gap-4 transition-opacity duration-300 opacity-0 pointer-events-none overflow-hidden">
+                <section
+                    class="max-w-4xl w-full mx-auto border border-gray-300 dark:border-primary/30 bg-white dark:bg-black/80 p-1 relative shrink-0 my-auto shadow-xl dark:shadow-[0_0_20px_rgba(57,255,20,0.1)] animate-[fadeIn_0.5s_ease-out]">
+                    <div
+                        class="bg-gray-200 dark:bg-primary/10 p-3 border-b border-gray-300 dark:border-primary/30 flex justify-between items-center">
+                        <h2 class="text-sm font-bold uppercase flex items-center gap-2">
+                            <span class="material-icons-outlined text-sm">terminal</span>
+                            USER_QUERY
+                        </h2>
+                        <div id="status-indicator" class="h-2 w-2 rounded-full bg-primary animate-pulse"></div>
+                    </div>
+                    <form id="generate-form" class="p-4 sm:p-8">
+                        <div class="relative group">
+                            <span
+                                class="absolute left-4 top-4 text-xl select-none text-black dark:text-primary font-bold opacity-50">&gt;</span>
+                            <textarea id="query" name="query"
+                                class="w-full h-40 sm:h-48 bg-gray-50 dark:bg-black/50 border border-gray-300 dark:border-primary/50 p-4 pl-10 text-base md:text-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none placeholder-gray-400 dark:placeholder-primary/30 transition-all font-mono shadow-inner"
+                                placeholder="ENTER NATURAL LANGUAGE QUERY..." required></textarea>
+                            <div
+                                class="absolute bottom-4 right-4 text-xs opacity-50 font-bold tracking-wider hidden sm:block">
+                                CMD+ENTER to execute</div>
+                        </div>
+                        <div class="flex flex-col sm:flex-row justify-between items-center mt-6 gap-4">
+                            <div id="status-text" class="text-xs font-bold opacity-60 uppercase tracking-widest">
+                                STATUS: WAITING_FOR_INPUT...
+                            </div>
+                            <button type="submit" id="generate-btn"
+                                class="w-full sm:w-auto bg-black dark:bg-primary text-white dark:text-black border border-gray-800 dark:border-primary px-8 py-3 uppercase font-bold text-sm hover:bg-gray-800 dark:hover:bg-transparent dark:hover:text-primary transition-all flex items-center justify-center gap-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)] dark:shadow-[0_0_15px_rgba(57,255,20,0.4)] glitch-hover active:translate-y-1 active:shadow-none disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none tracking-widest">
+                                <span id="btn-text">Execute_Query</span>
+                                <span id="btn-icon" class="material-icons-outlined text-base">bolt</span>
+                            </button>
+                        </div>
+                    </form>
+                    <div class="absolute top-1/2 -left-2 w-4 h-[2px] bg-gray-400 dark:bg-primary/50"></div>
+                    <div class="absolute top-1/2 -right-2 w-4 h-[2px] bg-gray-400 dark:bg-primary/50"></div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <footer
+        class="bg-white dark:bg-black border-t border-gray-300 dark:border-primary/30 p-3 text-[10px] md:text-xs uppercase flex flex-col md:flex-row justify-between items-center z-10 text-gray-500 dark:text-primary/60 shrink-0 gap-2">
+        <div class="flex items-center gap-4 font-bold">
+            <span>MEM: 64K OK</span>
+            <span class="hidden md:inline">|</span>
+            <span class="hidden md:inline">CPU: ONLINE</span>
+        </div>
+        <div
+            class="flex items-center gap-2 font-bold tracking-widest text-gray-700 dark:text-primary/80 text-[10px] sm:text-xs text-center md:text-left flex-wrap justify-center">
+            <span>[TEAM: ALPHA]</span>
+            <span class="hidden md:inline">|</span>
+            <span>MEMBERS: Pon Prathakshana G, Rishapthi J, Rajeswaran D, Raguram S R M</span>
+        </div>
+        <div id="footer-status" class="animate-pulse font-bold tracking-widest">
+            READY FOR INPUT
+        </div>
+    </footer>
+
+    <!-- Result Modal Overlay -->
+    <div id="result-modal"
+        class="fixed inset-0 z-50 flex items-center justify-center transition-opacity duration-300 opacity-0 pointer-events-none p-2 sm:p-4">
+        <!-- Backdrop -->
+        <div id="modal-bg" class="absolute inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-md transition-opacity">
+        </div>
+
+        <!-- Modal Content Box -->
+        <div id="modal-content-box"
+            class="bg-white dark:bg-black border-2 border-gray-400 dark:border-primary w-full max-w-4xl max-h-[90vh] flex flex-col relative transition-all duration-500 overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] dark:shadow-[0_0_40px_rgba(57,255,20,0.15)] scale-95 opacity-0 transform">
+            <div
+                class="bg-gray-200 dark:bg-primary/10 p-3 sm:p-4 border-b border-gray-300 dark:border-primary/30 flex justify-between items-center shrink-0">
+                <h2 class="text-sm font-bold uppercase flex items-center gap-2 tracking-widest">
+                    <span class="material-icons-outlined text-sm">code</span>
+                    RESULT_OUTPUT
+                </h2>
+                <div class="flex items-center gap-4 sm:gap-6 text-xs uppercase font-bold">
+                    <label class="flex items-center cursor-pointer gap-2 group"
+                        title="Toggle Insights (Intent & Explanation)">
+                        <span
+                            class="opacity-70 group-hover:opacity-100 transition-opacity hidden sm:inline">Insights</span>
+                        <div class="relative flex items-center">
+                            <input type="checkbox" id="insights-toggle" class="peer sr-only">
+                            <div
+                                class="block bg-gray-400 dark:bg-gray-800 w-10 h-5 rounded-full transition-colors peer-checked:bg-black dark:peer-checked:bg-primary/40 border border-gray-500 dark:border-primary/50">
+                            </div>
+                            <div
+                                class="dot absolute left-1 bg-white dark:bg-primary w-3 h-3 rounded-full transition-transform peer-checked:translate-x-5 shadow-sm">
+                            </div>
+                        </div>
+                    </label>
+                    <label class="flex items-center cursor-pointer gap-2 group" title="Toggle Performance Data">
+                        <span
+                            class="opacity-70 group-hover:opacity-100 transition-opacity hidden sm:inline">Metrics</span>
+                        <div class="relative flex items-center">
+                            <input type="checkbox" id="metrics-toggle" class="peer sr-only">
+                            <div
+                                class="block bg-gray-400 dark:bg-gray-800 w-10 h-5 rounded-full transition-colors peer-checked:bg-black dark:peer-checked:bg-primary/40 border border-gray-500 dark:border-primary/50">
+                            </div>
+                            <div
+                                class="dot absolute left-1 bg-white dark:bg-primary w-3 h-3 rounded-full transition-transform peer-checked:translate-x-5 shadow-sm">
+                            </div>
+                        </div>
+                    </label>
+                    <div class="flex items-center gap-3 border-l border-gray-400 dark:border-primary/40 pl-4 sm:pl-6">
+                        <button id="copy-btn"
+                            class="hover:text-black dark:hover:text-primary text-gray-500 dark:text-primary/50 transition-colors hidden"
+                            title="Copy SQL">
+                            <span class="material-icons-outlined text-base">content_copy</span>
+                        </button>
+                        <button id="close-modal-btn"
+                            class="hover:text-red-600 text-gray-500 dark:text-primary/50 transition-colors"
+                            title="Close">
+                            <span class="material-icons-outlined text-base">close</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden relative">
+                <!-- Result Area -->
+                <div
+                    class="flex-1 p-4 sm:p-6 bg-gray-50 dark:bg-black relative overflow-auto flex flex-col min-h-[300px] sm:min-h-[400px]">
+                    <div
+                        class="absolute inset-0 pointer-events-none shadow-[inset_0_0_30px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_0_30px_rgba(0,0,0,0.8)] z-20">
+                    </div>
+
+                    <!-- Loading State -->
+                    <div id="loading-state"
+                        class="relative z-10 font-mono text-sm md:text-base flex items-center justify-center h-full">
+                        <div class="text-center flex flex-col items-center">
+                            <div class="dot-flashing mb-8 scale-150"></div>
+                            <p
+                                class="uppercase tracking-widest text-xs font-bold text-gray-600 dark:text-primary animate-pulse mt-6">
+                                PROCESSING_QUERY_VIA_API...</p>
+                        </div>
+                    </div>
+
+                    <!-- Error State -->
+                    <div id="error-state"
+                        class="relative z-10 font-mono text-sm md:text-base leading-relaxed hidden flex-col h-full">
+                        <div
+                            class="text-red-500 border-2 border-red-500/50 bg-red-500/10 p-6 mx-auto my-auto max-w-lg w-full shadow-lg">
+                            <span class="font-bold flex items-center text-lg mb-2"><span
+                                    class="material-icons-outlined mr-2">error_outline</span> FATAL_ERROR</span>
+                            <div id="error-message" class="mt-2 text-sm tracking-wide opacity-90">CONNECTION REFUSED
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Result State -->
+                    <div id="result-container"
+                        class="relative z-10 font-mono text-sm md:text-base leading-relaxed hidden h-full flex-col">
+                        <div
+                            class="flex gap-2 text-gray-400 dark:text-gray-600 mb-4 select-none border-b border-gray-300 dark:border-gray-800 pb-3 shrink-0">
+                            <span class="w-3 h-3 rounded-full bg-red-500/80 dark:bg-red-500/50"></span>
+                            <span class="w-3 h-3 rounded-full bg-yellow-500/80 dark:bg-yellow-500/50"></span>
+                            <span class="w-3 h-3 rounded-full bg-green-500/80 dark:bg-green-500/50"></span>
+                        </div>
+
+                        <div id="insights-container"
+                            class="hidden mb-4 p-4 border border-gray-300 dark:border-primary/30 bg-gray-100 dark:bg-white/5 space-y-3 shadow-inner shrink-0">
+                            <div>
+                                <h4
+                                    class="text-xs opacity-70 uppercase tracking-widest font-bold mb-1 border-b border-gray-300 dark:border-primary/20 pb-1 flex items-center gap-2">
+                                    <span class="material-icons-outlined text-[14px]">psychology</span> Predicted Intent
+                                </h4>
+                                <p id="sql-intent" class="text-sm font-bold text-gray-800 dark:text-primary uppercase">
+                                </p>
+                            </div>
+                            <div>
+                                <h4
+                                    class="text-xs opacity-70 uppercase tracking-widest font-bold mb-1 border-b border-gray-300 dark:border-primary/20 pb-1 flex items-center gap-2">
+                                    <span class="material-icons-outlined text-[14px]">lightbulb</span> Explanation
+                                </h4>
+                                <p id="sql-explanation"
+                                    class="text-sm text-gray-700 dark:text-primary/90 leading-relaxed"></p>
+                            </div>
+                        </div>
+
+                        <div
+                            class="flex-1 overflow-auto hide-scrollbar bg-white/50 dark:bg-transparent p-2 sm:p-4 border border-gray-200 dark:border-transparent relative shadow-inner dark:shadow-none">
+                            <pre
+                                class="m-0 h-full hide-scrollbar overflow-auto"><code id="sql-result" class="language-sql text-gray-800 dark:text-primary bg-transparent text-sm md:text-base leading-relaxed"></code></pre>
+                            <span
+                                class="absolute right-4 bottom-4 animate-blink inline-block w-2.5 h-5 bg-black dark:bg-primary align-middle ml-1 hidden"
+                                id="blink-cursor"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Metrics Sidebar -->
+                <div id="metrics-sidebar"
+                    class="w-full md:w-0 h-0 md:h-auto overflow-hidden bg-gray-100 dark:bg-terminal-gray/80 border-t md:border-t-0 md:border-l border-gray-300 dark:border-primary/30 transition-all duration-500 ease-in-out shrink-0 flex flex-col shadow-inner">
+                    <div class="w-full md:w-72 p-4 sm:p-6 font-mono text-xs overflow-auto flex-1 h-full min-h-[200px]">
+                        <h3
+                            class="text-xs font-bold uppercase mb-6 opacity-70 flex items-center gap-2 tracking-widest border-b border-gray-300 dark:border-primary/30 pb-2">
+                            <span class="material-icons-outlined text-sm">analytics</span> MODEL_METRICS
+                        </h3>
+                        <div id="model-metrics" class="flex flex-col gap-3 tracking-wide">
+                            <div class="flex items-center justify-center h-40 opacity-50">
+                                <p class="text-center uppercase animate-pulse">// WAITING FOR GENERATION //</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="absolute -bottom-1 -right-1 w-3 h-3 border-r-2 border-b-2 border-gray-400 dark:border-primary">
+            </div>
+            <div class="absolute -top-1 -left-1 w-3 h-3 border-l-2 border-t-2 border-gray-400 dark:border-primary">
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast"
+        class="fixed top-4 right-4 flex items-center bg-white dark:bg-black text-black dark:text-primary px-4 py-3 border-2 border-gray-400 dark:border-primary transform transition-all duration-300 translate-x-[150%] z-[60] shadow-lg dark:shadow-[0_0_15px_rgba(57,255,20,0.4)]">
+        <span class="material-icons-outlined w-5 h-5 mr-2 text-green-600 dark:text-primary">check_circle</span>
+        <span id="toast-message" class="text-sm font-bold uppercase tracking-wider">Copied Output</span>
+    </div>
+
+    <script>
+        // Check for dark mode preference
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+        }
+
+        // --- Typing effect simulation on load ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const textarea = document.getElementById('query');
+            const originalPlaceholder = textarea.getAttribute('placeholder') || '';
+            textarea.setAttribute('placeholder', '');
+            let i = 0;
+            const typeWriter = () => {
+                if (i < originalPlaceholder.length) {
+                    textarea.setAttribute('placeholder', originalPlaceholder.substring(0, i + 1) + '_');
+                    i++;
+                    setTimeout(typeWriter, 50);
+                } else {
+                    textarea.setAttribute('placeholder', originalPlaceholder);
+                }
+            };
+            setTimeout(typeWriter, 1200);
+
+            // Handle CMD+Enter
+            textarea.addEventListener('keydown', function (e) {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                    e.preventDefault();
+                    const form = document.getElementById('generate-form');
+                    if (form.requestSubmit) {
+                        form.requestSubmit();
+                    } else {
+                        form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+                    }
+                }
+            });
+
+            // Allow tab within schema
+            const schemaTextarea = document.getElementById('schema');
+            if (schemaTextarea) {
+                schemaTextarea.addEventListener('keydown', function (e) {
+                    if (e.key === 'Tab') {
+                        e.preventDefault();
+                        var start = this.selectionStart;
+                        var end = this.selectionEnd;
+                        this.value = this.value.substring(0, start) +
+                            "  " + this.value.substring(end);
+                        this.selectionStart =
+                            this.selectionEnd = start + 2;
+                    }
+                });
+            }
+        });
+
+        // --- Application Logic ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // Tabs Elements
+            const tabContextBtn = document.getElementById('tab-btn-context');
+            const tabQueryBtn = document.getElementById('tab-btn-query');
+            const tabPanelContext = document.getElementById('tab-panel-context');
+            const tabPanelQuery = document.getElementById('tab-panel-query');
+
+            // Form Elements
+            const form = document.getElementById('generate-form');
+            const schemaInput = document.getElementById('schema');
+            const queryInput = document.getElementById('query');
+            const modelSelect = document.getElementById('model');
+
+            // Button & Status Elements
+            const submitBtn = document.getElementById('generate-btn');
+            const btnText = document.getElementById('btn-text');
+            const btnIcon = document.getElementById('btn-icon');
+            const statusText = document.getElementById('status-text');
+            const statusIndicator = document.getElementById('status-indicator');
+            const footerStatus = document.getElementById('footer-status');
+
+            // Modal Elements
+            const modal = document.getElementById('result-modal');
+            const modalContentBox = document.getElementById('modal-content-box');
+            const modalBg = document.getElementById('modal-bg');
+            const closeModalBtn = document.getElementById('close-modal-btn');
+            const metricsToggle = document.getElementById('metrics-toggle');
+            const metricsSidebar = document.getElementById('metrics-sidebar');
+            const insightsToggle = document.getElementById('insights-toggle');
+            const insightsContainer = document.getElementById('insights-container');
+            const sqlIntent = document.getElementById('sql-intent');
+            const sqlExplanation = document.getElementById('sql-explanation');
+
+            // State Elements within Modal
+            const loadingState = document.getElementById('loading-state');
+            const errorState = document.getElementById('error-state');
+            const errorMessage = document.getElementById('error-message');
+            const resultContainer = document.getElementById('result-container');
+            const sqlResult = document.getElementById('sql-result');
+            const copyBtn = document.getElementById('copy-btn');
+            const blinkCursor = document.getElementById('blink-cursor');
+            const loadExampleBtn = document.getElementById('load-example');
+            const refreshModelsBtn = document.getElementById('refresh-models-btn');
+
+            // --- Dynamic Model Loading ---
+            async function loadModels() {
+                const refreshIcon = refreshModelsBtn.querySelector('.refresh-icon');
+                if (refreshIcon) refreshIcon.classList.add('animate-spin');
+                modelSelect.disabled = true;
+                modelSelect.innerHTML = '<option value="">SYNCING LOCAL OLLAMA...</option>';
+
+                try {
+                    const response = await fetch('/api/models');
+                    const data = await response.json();
+
+                    if (!response.ok || data.error) {
+                        throw new Error(data.error || 'Failed to fetch models');
+                    }
+
+                    modelSelect.innerHTML = '';
+                    if (data.models && data.models.length > 0) {
+                        data.models.forEach(model => {
+                            const option = document.createElement('option');
+                            option.value = model.name;
+                            const sizeGB = (model.size / (1024 * 1024 * 1024)).toFixed(1);
+                            option.textContent = `${model.name.toUpperCase()} [${sizeGB}GB]`;
+
+                            // Check for preferred defaults
+                            if (model.name.includes('llama3') || model.name.includes('sqlcoder')) {
+                                option.selected = true;
+                            }
+
+                            modelSelect.appendChild(option);
+                        });
+                    } else {
+                        modelSelect.innerHTML = '<option value="">NO MODELS FOUND - RUN OLLAMA PULL</option>';
+                    }
+                } catch (error) {
+                    console.error('Model fetch error:', error);
+                    modelSelect.innerHTML = '<option value="">ERROR FETCHING MODELS</option>';
+                    showToast('OLLAMA SYNC FAILED', true);
+                } finally {
+                    modelSelect.disabled = false;
+                    if (refreshIcon) refreshIcon.classList.remove('animate-spin');
+                }
+            }
+
+            // Load on init
+            loadModels();
+
+            // Allow manual refresh
+            refreshModelsBtn.addEventListener('click', loadModels);
+
+            // --- Tab Switching Logic ---
+            function switchTab(tabId) {
+                if (tabId === 'context') {
+                    tabContextBtn.classList.add('border-primary', 'dark:text-primary', 'text-black');
+                    tabContextBtn.classList.remove('border-transparent', 'text-gray-500');
+                    tabQueryBtn.classList.remove('border-primary', 'dark:text-primary', 'text-black');
+                    tabQueryBtn.classList.add('border-transparent', 'text-gray-500');
+
+                    tabPanelContext.classList.remove('opacity-0', 'pointer-events-none');
+                    tabPanelQuery.classList.add('opacity-0', 'pointer-events-none');
+                } else if (tabId === 'query') {
+                    tabQueryBtn.classList.add('border-primary', 'dark:text-primary', 'text-black');
+                    tabQueryBtn.classList.remove('border-transparent', 'text-gray-500');
+                    tabContextBtn.classList.remove('border-primary', 'dark:text-primary', 'text-black');
+                    tabContextBtn.classList.add('border-transparent', 'text-gray-500');
+
+                    tabPanelQuery.classList.remove('opacity-0', 'pointer-events-none');
+                    tabPanelContext.classList.add('opacity-0', 'pointer-events-none');
+
+                    // Auto focus query box
+                    setTimeout(() => queryInput.focus(), 300);
+                }
+            }
+
+            tabContextBtn.addEventListener('click', () => switchTab('context'));
+            tabQueryBtn.addEventListener('click', () => switchTab('query'));
+
+            // --- Modal Logic ---
+            function openModal() {
+                modal.classList.remove('opacity-0', 'pointer-events-none');
+                // Slight delay for animation scale up
+                setTimeout(() => {
+                    modalContentBox.classList.remove('scale-95', 'opacity-0');
+                    modalContentBox.classList.add('scale-100', 'opacity-100');
+                }, 50);
+            }
+
+            function closeModal() {
+                modalContentBox.classList.remove('scale-100', 'opacity-100');
+                modalContentBox.classList.add('scale-95', 'opacity-0');
+                setTimeout(() => {
+                    modal.classList.add('opacity-0', 'pointer-events-none');
+                }, 300);
+            }
+
+            closeModalBtn.addEventListener('click', closeModal);
+            modalBg.addEventListener('click', closeModal);
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && !modal.classList.contains('pointer-events-none')) {
+                    closeModal();
+                }
+            });
+
+            metricsToggle.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    // Expand sidebar
+                    metricsSidebar.classList.remove('w-0', 'md:w-0', 'h-0');
+                    metricsSidebar.classList.add('w-full', 'md:w-72', 'h-48', 'md:h-auto');
+                    modalContentBox.classList.remove('max-w-4xl');
+                    modalContentBox.classList.add('max-w-6xl');
+                } else {
+                    // Collapse sidebar
+                    metricsSidebar.classList.add('w-0', 'md:w-0', 'h-0');
+                    metricsSidebar.classList.remove('w-full', 'md:w-72', 'h-48', 'md:h-auto');
+                    modalContentBox.classList.add('max-w-4xl');
+                    modalContentBox.classList.remove('max-w-6xl');
+                }
+            });
+
+            // --- Insights Toggle Logic ---
+            insightsToggle.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    insightsContainer.classList.remove('hidden');
+                } else {
+                    insightsContainer.classList.add('hidden');
+                }
+            });
+
+            // --- Example Schema ---
+            const exampleSchema = `CREATE TABLE Students (
+  student_id SERIAL PRIMARY KEY,
+  roll_number VARCHAR(10) UNIQUE NOT NULL,
+  first_name VARCHAR(50) NOT NULL,
+  last_name VARCHAR(50),
+  email VARCHAR(100) UNIQUE,
+  cgpa DECIMAL(3, 2) CHECK (cgpa <= 10.0),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE Courses (
+  course_id SERIAL PRIMARY KEY,
+  course_name VARCHAR(100) NOT NULL,
+  credits INT
+);
+
+CREATE TABLE Enrollments (
+  enrollment_id SERIAL PRIMARY KEY,
+  student_id INT REFERENCES Students(student_id),
+  course_id INT REFERENCES Courses(course_id),
+  semester VARCHAR(10)
+);`;
+
+            loadExampleBtn.addEventListener('click', () => {
+                schemaInput.value = exampleSchema;
+                queryInput.value = "Show the first name, last name, and email of all students who have a CGPA greater than 8.5, ordered by CGPA descending.";
+                schemaInput.classList.add('bg-black/10', 'dark:bg-primary/20');
+                setTimeout(() => schemaInput.classList.remove('bg-black/10', 'dark:bg-primary/20'), 300);
+            });
+
+            // --- Generation State Logic ---
+            function showState(state) {
+                loadingState.classList.add('hidden');
+                errorState.classList.add('hidden');
+                resultContainer.classList.add('hidden');
+                copyBtn.classList.add('hidden');
+                blinkCursor.classList.add('hidden');
+
+                if (state === 'loading') {
+                    openModal();
+                    loadingState.classList.remove('hidden');
+                    submitBtn.disabled = true;
+                    btnText.textContent = 'EXECUTING...';
+                    btnIcon.classList.add('animate-spin');
+                    statusText.textContent = 'STATUS: TX_IN_PROGRESS...';
+                    footerStatus.textContent = 'SYSTEM PROCESSING';
+                    statusIndicator.classList.remove('bg-primary');
+                    statusIndicator.classList.add('bg-yellow-500');
+                } else if (state === 'result') {
+                    resultContainer.classList.remove('hidden');
+                    copyBtn.classList.remove('hidden');
+                    blinkCursor.classList.remove('hidden');
+                    resetFormState();
+                    statusText.textContent = 'STATUS: TX_COMPLETE';
+                    footerStatus.textContent = 'READY FOR INPUT';
+                    statusIndicator.classList.add('bg-primary');
+                    statusIndicator.classList.remove('bg-yellow-500', 'bg-red-500');
+                } else if (state === 'error') {
+                    errorState.classList.remove('hidden');
+                    resetFormState();
+                    statusText.textContent = 'STATUS: TX_FAILED';
+                    footerStatus.textContent = 'READY FOR INPUT';
+                    statusIndicator.classList.add('bg-red-500');
+                    statusIndicator.classList.remove('bg-primary', 'bg-yellow-500');
+                }
+            }
+
+            function resetFormState() {
+                submitBtn.disabled = false;
+                btnText.textContent = 'Execute_Query';
+                btnIcon.classList.remove('animate-spin');
+            }
+
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const schema = schemaInput.value.trim();
+                const query = queryInput.value.trim();
+                const model = modelSelect.value;
+
+                if (!schema) {
+                    switchTab('context');
+                    setTimeout(() => schemaInput.focus(), 300);
+                    return;
+                }
+                if (!query) return;
+
+                showState('loading');
+                const startTime = performance.now();
+
+                // Clear metrics
+                const metricsContainer = document.getElementById('model-metrics');
+                if (metricsContainer) {
+                    metricsContainer.innerHTML = `<div class="flex items-center justify-center h-full opacity-50 mt-10 text-gray-500 dark:text-primary animate-pulse">
+                        <p class="text-center font-bold uppercase">// CALCULATING METRICS //</p>
+                    </div>`;
+                }
+
+                try {
+                    const response = await fetch('/api/generate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ schema, query, model })
+                    });
+
+                    const data = await response.json();
+
+                    if (!response.ok || data.error) {
+                        throw new Error(data.error || 'API_RESPONDED_ERR');
+                    }
+
+                    const endTime = performance.now();
+                    const seconds = ((endTime - startTime) / 1000).toFixed(2);
+
+                    sqlResult.textContent = data.sql;
+                    if (sqlIntent) sqlIntent.textContent = data.intent || "UNKNOWN_INTENT";
+                    if (sqlExplanation) sqlExplanation.textContent = (data.explanation || "No explanation processing logic defined in the model payload response.").replace(/\n/g, ' ');
+
+                    delete sqlResult.dataset.highlighted;
+                    hljs.highlightElement(sqlResult);
+
+                    if (metricsContainer) {
+                        if (data.metrics) {
+                            const m = data.metrics;
+                            const totalSec = (m.total_duration / 1e9).toFixed(2);
+                            const loadSec = (m.load_duration / 1e9).toFixed(2);
+                            const evalSec = (m.eval_duration / 1e9).toFixed(2);
+                            const promptSec = (m.prompt_eval_duration / 1e9).toFixed(2);
+                            const tokensPerSec = m.eval_duration > 0 ? (m.eval_count / (m.eval_duration / 1e9)).toFixed(2) : 0;
+
+                            metricsContainer.innerHTML = `
+                                <div class="flex justify-between border-b border-gray-300 dark:border-primary/20 pb-2 mb-2 bg-gray-200/50 dark:bg-black/50 p-2 rounded-sm shadow-sm">
+                                    <span class="opacity-70 font-bold">MODEL</span><span class="text-black dark:text-primary font-bold">${model.toUpperCase()}</span>
+                                </div>
+                                <div class="flex justify-between border-b border-gray-200 dark:border-primary/10 pb-1 mb-1 px-2">
+                                    <span class="opacity-70">TEMPERATURE</span><span class="font-bold">0.0</span>
+                                </div>
+                                <div class="flex justify-between border-b border-gray-200 dark:border-primary/10 pb-1 mb-1 px-2">
+                                    <span class="opacity-70">PROMPT TOKENS</span><span class="font-bold">${m.prompt_eval_count || '-'}</span>
+                                </div>
+                                <div class="flex justify-between border-b border-gray-200 dark:border-primary/10 pb-1 mb-1 px-2">
+                                    <span class="opacity-70">EVAL TOKENS</span><span class="font-bold">${m.eval_count || '-'}</span>
+                                </div>
+                                <div class="flex justify-between border-b border-gray-200 dark:border-primary/10 pb-1 mb-1 px-2">
+                                    <span class="opacity-70">SPEED (T/s)</span><span class="font-bold">${tokensPerSec}</span>
+                                </div>
+                                <div class="flex justify-between border-b border-gray-200 dark:border-primary/10 pb-1 mb-1 px-2">
+                                    <span class="opacity-70">LOAD TIME</span><span class="font-bold">${loadSec}s</span>
+                                </div>
+                                <div class="flex justify-between border-b border-gray-200 dark:border-primary/10 pb-1 mb-1 px-2">
+                                    <span class="opacity-70">PROMPT TIME</span><span class="font-bold">${promptSec}s</span>
+                                </div>
+                                <div class="flex justify-between border-b border-gray-300 dark:border-primary/30 pb-2 mb-2 px-2">
+                                    <span class="opacity-70">EVAL TIME</span><span class="font-bold">${evalSec}s</span>
+                                </div>
+                                <div class="flex justify-between font-bold text-sm bg-gray-200/50 dark:bg-black/50 p-2 rounded-sm shadow-sm">
+                                    <span class="opacity-80">TOTAL TIME</span><span class="text-black dark:text-primary">${totalSec}s</span>
+                                </div>
+                            `;
+                        } else {
+                            metricsContainer.innerHTML = `
+                                <div class="flex items-center justify-center p-4">
+                                    <span class="opacity-50 text-center uppercase font-bold">Metrics Not Available</span>
+                                </div>
+                            `;
+                        }
+                    }
+
+                    showState('result');
+
+                } catch (error) {
+                    errorMessage.textContent = error.message.toUpperCase();
+                    showState('error');
+                    console.error('Generation Error:', error);
+                }
+            });
+
+            // --- Copy to Clipboard ---
+            copyBtn.addEventListener('click', async () => {
+                const text = sqlResult.textContent;
+                if (!text) return;
+
+                try {
+                    await navigator.clipboard.writeText(text);
+                    showToast('SQL_COPIED_TO_CLIPBOARD');
+                } catch (err) {
+                    console.error('Failed to copy text: ', err);
+                    showToast('COPY_FAILED', true);
+                }
+            });
+
+            // --- Toast Notification ---
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toast-message');
+            let toastTimeout;
+
+            function showToast(message, isError = false) {
+                toastMessage.textContent = message;
+
+                if (isError) {
+                    toast.classList.add('border-red-500', 'text-red-500', 'shadow-[0_0_15px_rgba(239,68,68,0.4)]');
+                    toast.classList.remove('border-gray-400', 'dark:border-primary', 'text-black', 'dark:text-primary', 'shadow-lg', 'dark:shadow-[0_0_15px_rgba(57,255,20,0.4)]');
+                    toast.querySelector('span.material-icons-outlined').textContent = 'error';
+                    toast.querySelector('span.material-icons-outlined').classList.replace('text-green-600', 'text-red-600');
+                    toast.querySelector('span.material-icons-outlined').classList.replace('dark:text-primary', 'dark:text-red-500');
+                } else {
+                    toast.classList.remove('border-red-500', 'text-red-500', 'shadow-[0_0_15px_rgba(239,68,68,0.4)]');
+                    toast.classList.add('border-gray-400', 'dark:border-primary', 'text-black', 'dark:text-primary', 'shadow-lg', 'dark:shadow-[0_0_15px_rgba(57,255,20,0.4)]');
+                    toast.querySelector('span.material-icons-outlined').textContent = 'check_circle';
+                    toast.querySelector('span.material-icons-outlined').classList.replace('text-red-600', 'text-green-600');
+                    toast.querySelector('span.material-icons-outlined').classList.replace('dark:text-red-500', 'dark:text-primary');
+                }
+
+                toast.classList.remove('translate-x-[150%]');
+
+                clearTimeout(toastTimeout);
+                toastTimeout = setTimeout(() => {
+                    toast.classList.add('translate-x-[150%]');
+                }, 2500);
+            }
+        });
+    </script>
+</body>
+
+</html>
